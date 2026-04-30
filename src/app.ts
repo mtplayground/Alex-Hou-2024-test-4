@@ -2,13 +2,18 @@ import type { GameplayConfig } from './config/env';
 import { isSelfCollision, isWallCollision } from './game/collision';
 import { isFoodEaten, resolveFoodConsumption } from './game/food';
 import { createFixedTickLoop } from './game/loop';
+import { attachKeyboardInput } from './input/keyboard';
 import { advanceSnake, resolveDirectionChange } from './game/movement';
 import { getTickIntervalForScore } from './game/speed';
-import type { GameState } from './game/types';
+import type { Direction, GameState } from './game/types';
 import { renderGameToCanvas } from './render/canvas';
 import { attachResponsiveCanvas } from './render/sizing';
 import { getHighScore } from './storage/high-score';
-import { getGameOverOverlayMarkup, updateGameOverOverlay } from './ui/game-over';
+import {
+  createRestartedGameState,
+  getGameOverOverlayMarkup,
+  updateGameOverOverlay,
+} from './ui/game-over';
 import { getHudMarkup, updateHud } from './ui/hud';
 
 export function getAppMarkup(
@@ -60,6 +65,7 @@ export function renderApp(
   }
 
   let currentState = initialState;
+  let pendingDirection: Direction = initialState.direction;
   const highScore = getHighScore();
 
   const resizeCleanup = attachResponsiveCanvas(
@@ -76,7 +82,7 @@ export function renderApp(
   const loop = createFixedTickLoop({
     initialState,
     update: (state) => {
-      const direction = resolveDirectionChange(state.direction, state.direction);
+      const direction = resolveDirectionChange(state.direction, pendingDirection);
       const nextHead = advanceSnake([state.snake[0]], direction)[0];
       const shouldGrow = isFoodEaten(nextHead, state.food);
       const nextSnake = advanceSnake(state.snake, direction, shouldGrow);
@@ -85,6 +91,8 @@ export function renderApp(
         isWallCollision(nextSnake[0], state.gridSize) ||
         isSelfCollision(nextSnake)
       ) {
+        pendingDirection = direction;
+
         return {
           ...state,
           direction,
@@ -101,7 +109,7 @@ export function renderApp(
         nextSnake,
       );
 
-      return {
+      const updatedState: GameState = {
         ...nextState,
         status: 'running',
         speedMs: getTickIntervalForScore(
@@ -111,6 +119,10 @@ export function renderApp(
           config.speedStepInterval,
         ),
       };
+
+      pendingDirection = updatedState.direction;
+
+      return updatedState;
     },
     render: (state) => {
       currentState = state;
@@ -129,17 +141,39 @@ export function renderApp(
     },
   });
 
-  if (initialState.status === 'idle') {
-    currentState = {
-      ...initialState,
-      status: 'running',
-    };
-    loop.setState(currentState);
-  }
+  const keyboardCleanup = attachKeyboardInput(window, {
+    getCurrentDirection: () => pendingDirection,
+    onDirectionChange: (direction) => {
+      pendingDirection = direction;
+    },
+    onControl: (control) => {
+      if (control === 'toggle-pause') {
+        const status =
+          currentState.status === 'running'
+            ? 'paused'
+            : currentState.status === 'paused' || currentState.status === 'idle'
+              ? 'running'
+              : currentState.status;
+
+        currentState = {
+          ...currentState,
+          status,
+        };
+        loop.setState(currentState);
+        return;
+      }
+
+      const restartedState = createRestartedGameState(currentState);
+      pendingDirection = restartedState.direction;
+      currentState = restartedState;
+      loop.setState(restartedState);
+    },
+  });
 
   loop.start();
 
   return () => {
+    keyboardCleanup();
     loop.stop();
     resizeCleanup();
   };
