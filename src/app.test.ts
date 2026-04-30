@@ -21,5 +21,8 @@ describe('getAppMarkup', () => {
     expect(markup).toContain('id="high-score-value"');
     expect(markup).toContain('id="status-value"');
     expect(markup).toContain('id="pause-overlay"');
+    expect(markup).toContain('id="game-over-overlay"');
+    expect(markup).toContain('id="final-score-value"');
+    expect(markup).toContain('id="restart-button"');
   });
 });

@@ -2,6 +2,7 @@ import type { GameplayConfig } from './config/env';
 import type { GameState } from './game/types';
 import { configureCanvas, renderGameToCanvas } from './render/canvas';
 import { getHighScore } from './storage/high-score';
+import { getGameOverOverlayMarkup, updateGameOverOverlay } from './ui/game-over';
 import { getHudMarkup, updateHud } from './ui/hud';
 
 export function getAppMarkup(
@@ -14,6 +15,7 @@ export function getAppMarkup(
       <h1>Snake Game</h1>
       <p>TypeScript + Vite bootstrap is ready.</p>
       ${getHudMarkup(initialState, highScore)}
+      ${getGameOverOverlayMarkup(initialState, highScore)}
       <canvas
         id="game-board"
         aria-label="Snake game board"
@@ -51,7 +53,10 @@ export function renderApp(
     throw new Error('Expected a 2D canvas context.');
   }
 
-  updateHud(container, initialState, getHighScore());
+  const highScore = getHighScore();
+
+  updateHud(container, initialState, highScore);
+  updateGameOverOverlay(container, initialState, highScore);
   configureCanvas(canvas, initialState.gridSize);
   renderGameToCanvas(context, initialState);
 }
