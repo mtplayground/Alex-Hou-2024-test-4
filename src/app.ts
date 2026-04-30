@@ -1,5 +1,11 @@
 import type { GameplayConfig } from './config/env';
+import { isSelfCollision, isWallCollision } from './game/collision';
+import { isFoodEaten, resolveFoodConsumption } from './game/food';
+import { createFixedTickLoop } from './game/loop';
+import { advanceSnake, resolveDirectionChange } from './game/movement';
+import { getTickIntervalForScore } from './game/speed';
 import type { GameState } from './game/types';
+import { renderGameToCanvas } from './render/canvas';
 import { attachResponsiveCanvas } from './render/sizing';
 import { getHighScore } from './storage/high-score';
 import { getGameOverOverlayMarkup, updateGameOverOverlay } from './ui/game-over';
@@ -53,19 +59,88 @@ export function renderApp(
     throw new Error('Expected a 2D canvas context.');
   }
 
+  let currentState = initialState;
   const highScore = getHighScore();
 
-  updateHud(container, initialState, highScore);
-  updateGameOverOverlay(container, initialState, highScore);
-
-  return attachResponsiveCanvas(
+  const resizeCleanup = attachResponsiveCanvas(
     window,
     canvas,
     context,
-    () => initialState,
+    () => currentState,
     () => ({
       width: window.innerWidth,
       height: window.innerHeight,
     }),
   );
+
+  const loop = createFixedTickLoop({
+    initialState,
+    update: (state) => {
+      const direction = resolveDirectionChange(state.direction, state.direction);
+      const nextHead = advanceSnake([state.snake[0]], direction)[0];
+      const shouldGrow = isFoodEaten(nextHead, state.food);
+      const nextSnake = advanceSnake(state.snake, direction, shouldGrow);
+
+      if (
+        isWallCollision(nextSnake[0], state.gridSize) ||
+        isSelfCollision(nextSnake)
+      ) {
+        return {
+          ...state,
+          direction,
+          snake: nextSnake,
+          status: 'game-over',
+        };
+      }
+
+      const nextState = resolveFoodConsumption(
+        {
+          ...state,
+          direction,
+        },
+        nextSnake,
+      );
+
+      return {
+        ...nextState,
+        status: 'running',
+        speedMs: getTickIntervalForScore(
+          nextState.score,
+          config.initialSpeedMs,
+          config.speedStepMs,
+          config.speedStepInterval,
+        ),
+      };
+    },
+    render: (state) => {
+      currentState = state;
+
+      const boardSizePx = Number.parseFloat(canvas.style.width);
+
+      renderGameToCanvas(
+        context,
+        state,
+        Number.isFinite(boardSizePx) && boardSizePx > 0
+          ? { boardSizePx }
+          : undefined,
+      );
+      updateHud(container, state, highScore);
+      updateGameOverOverlay(container, state, highScore);
+    },
+  });
+
+  if (initialState.status === 'idle') {
+    currentState = {
+      ...initialState,
+      status: 'running',
+    };
+    loop.setState(currentState);
+  }
+
+  loop.start();
+
+  return () => {
+    loop.stop();
+    resizeCleanup();
+  };
 }
