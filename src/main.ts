@@ -1,3 +1,4 @@
+import './styles.css';
 import { renderApp } from './app';
 import { gameplayConfig } from './config/env';
 import { createInitialGameState } from './game/initial-state';
