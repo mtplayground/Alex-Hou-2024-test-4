@@ -1,0 +1,113 @@
+Architecture plan for `mtplayground/Alex-Hou-2024-test-4`
+
+Goal
+- Build a browser-based Snake game with TypeScript + Vite, canvas rendering, deterministic game logic, keyboard controls, local high-score persistence, responsive layout, tests, and static production delivery through nginx.
+
+Module structure
+- `src/main.ts`
+  - App bootstrap and stylesheet import.
+- `src/app/`
+  - `App.ts`: top-level UI composition and lifecycle wiring.
+  - `bootstrap.ts`: startup helpers if mount logic grows.
+- `src/game/`
+  - `types.ts`: shared domain types and enums.
+  - `initial-state.ts`: factory for a fresh game state.
+  - `movement.ts`: snake movement and direction validation.
+  - `food.ts`: food spawning and food-collision handling.
+  - `collision.ts`: wall and self-collision checks.
+  - `speed.ts`: score-based tick-rate progression.
+  - `tick.ts`: pure single-tick state transition orchestration.
+  - `loop.ts`: fixed-tick runtime scheduler over `tick.ts`.
+- `src/render/`
+  - `canvas.ts`: canvas renderer for board, snake, food, and optional grid.
+  - `sizing.ts`: responsive canvas sizing and device-pixel-ratio scaling.
+- `src/input/`
+  - `keyboard.ts`: keyboard event binding and intent translation.
+- `src/storage/`
+  - `high-score.ts`: localStorage read/write with safe fallback behavior.
+- `src/ui/`
+  - `hud.ts`: score, high score, and status text rendering helpers.
+  - `overlay.ts`: game-over overlay and restart controls.
+- `src/config/`
+  - `env.ts`: typed environment variable access.
+  - `constants.ts`: board defaults, colors, storage keys, speed rules.
+- `src/test/`
+  - `setup.ts`: Vitest setup.
+  - integration and unit tests as features land.
+
+Shared types
+- `type Direction = 'up' | 'down' | 'left' | 'right'`
+- `type GameStatus = 'idle' | 'running' | 'paused' | 'game-over'`
+- `type Point = { x: number; y: number }`
+- `type Snake = Point[]`
+- `type BoardSize = { cols: number; rows: number }`
+- `type GameState = {`
+  - `board: BoardSize`
+  - `snake: Snake`
+  - `direction: Direction`
+  - `nextDirection: Direction`
+  - `food: Point`
+  - `status: GameStatus`
+  - `score: number`
+  - `highScore: number`
+  - `tickMs: number`
+`}`
+
+Key design decisions
+- Keep core game logic pure.
+  - `initial-state`, `movement`, `food`, `collision`, `speed`, and `tick` should be framework-free and side-effect free so they are easy to unit test.
+- Separate simulation from runtime concerns.
+  - `tick.ts` computes the next state.
+  - `loop.ts`, `keyboard.ts`, `canvas.ts`, and `high-score.ts` handle timers, DOM events, drawing, and persistence.
+- Use queued direction changes.
+  - Store both `direction` and `nextDirection` so rapid keyboard input cannot cause illegal same-tick reversals.
+- Centralize board geometry as grid coordinates.
+  - Logic works in cell units, not pixels; rendering translates cells to canvas coordinates.
+- Make restart reuse the initial-state factory.
+  - Restart should preserve `highScore` and static config while resetting gameplay fields consistently.
+- Keep environment variables minimal.
+  - Only expose values that affect build/runtime configuration, such as initial speed, board dimensions, or debug flags, and parse them once in `config/env.ts`.
+
+Issue dependency map
+- Foundation
+  - `#1` Initialize npm project with TypeScript and Vite
+  - `#2` Add ESLint, Prettier, and Vitest configuration
+  - `#3` Add environment variable support and `.env.example`
+  - `#4` Add Dockerfile and docker-compose for nginx static delivery
+- Domain model and pure logic
+  - `#5` Define game state types and initial-state factory
+  - `#6` Implement snake movement and direction logic
+  - `#7` Implement food spawning and collision detection
+  - `#8` Implement speed progression rule
+- Runtime integration
+  - `#9` Implement canvas renderer
+  - `#10` Implement keyboard input handler
+  - `#11` Implement fixed-tick game loop
+  - `#12` Implement localStorage high-score module
+- UI assembly
+  - `#13` Build HUD: score, high score, status
+  - `#14` Game-over overlay with restart
+  - `#15` Responsive canvas sizing
+- Verification and finish
+  - `#16` Integration test for a full game tick sequence
+  - `#17` Production build verification and README
+
+Recommended execution order
+- `#1 -> #2 -> #3 -> #4`
+- `#5 -> #6 -> #7 -> #8`
+- `#9 -> #10 -> #11 -> #12`
+- `#13 -> #14 -> #15`
+- `#16 -> #17`
+
+Cross-issue notes
+- `#3` should define typed defaults that `#5`, `#8`, and `#15` can share instead of reading `import.meta.env` throughout the app.
+- `#5` should expose deterministic initial placement for tests, either through injectable config or helper parameters.
+- `#6` and `#7` should agree on collision ordering inside one tick: apply direction, move head, resolve wall/self collision, then resolve food and growth.
+- `#8` should return a derived `tickMs` from score or food count rather than mutating timer logic directly; `#11` can then restart or adjust the loop from state.
+- `#9` should render strictly from `GameState` so `#11`, `#13`, and `#14` can all observe the same source of truth.
+- `#10` should emit high-level intents like direction changes and restart, not manipulate game state fields directly.
+- `#11` should be the only place with `setInterval` or `requestAnimationFrame` timing control.
+- `#12` should fail safely when localStorage is unavailable and expose a small interface that `App.ts` can call on startup and score updates.
+- `#15` should preserve logical board dimensions while scaling the canvas display size and backing resolution independently.
+- `#16` should focus on a pure tick sequence through `tick.ts` rather than DOM-heavy integration so it remains stable and fast.
+- `#17` should verify both `npm run build` and the nginx container path to catch asset-base or static-file serving issues before the repo is considered complete.
