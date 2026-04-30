@@ -7,7 +7,7 @@ export type Snake = Position[];
 
 export type Direction = 'up' | 'down' | 'left' | 'right';
 
-export type GameStatus = 'idle' | 'running' | 'game-over';
+export type GameStatus = 'idle' | 'running' | 'paused' | 'game-over';
 
 export type GameState = {
   gridSize: number;
