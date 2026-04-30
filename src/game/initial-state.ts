@@ -1,6 +1,8 @@
 import { gameplayConfig } from '../config/env';
 
-import type { GameState, Position, Snake } from './types';
+import { spawnFood } from './food';
+
+import type { GameState, Snake } from './types';
 
 function assertValidGridSize(gridSize: number): void {
   if (!Number.isInteger(gridSize) || gridSize < 3) {
@@ -19,24 +21,6 @@ function createStartingSnake(gridSize: number): Snake {
   ];
 }
 
-function positionsMatch(left: Position, right: Position): boolean {
-  return left.x === right.x && left.y === right.y;
-}
-
-function createStartingFood(gridSize: number, snake: Snake): Position {
-  for (let y = 0; y < gridSize; y += 1) {
-    for (let x = 0; x < gridSize; x += 1) {
-      const candidate = { x, y };
-
-      if (!snake.some((segment) => positionsMatch(segment, candidate))) {
-        return candidate;
-      }
-    }
-  }
-
-  throw new Error('Unable to place food on the grid.');
-}
-
 export function createInitialGameState(
   gridSize: number,
   initialSpeedMs = gameplayConfig.initialSpeedMs,
@@ -52,7 +36,7 @@ export function createInitialGameState(
   return {
     gridSize,
     snake,
-    food: createStartingFood(gridSize, snake),
+    food: spawnFood(gridSize, snake, () => 0),
     direction: 'right',
     status: 'idle',
     score: 0,
