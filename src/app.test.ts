@@ -2,13 +2,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const moduleMocks = vi.hoisted(() => ({
   resizeCleanupMock: vi.fn(),
+  keyboardCleanupMock: vi.fn(),
   attachResponsiveCanvasMock: vi.fn(),
+  attachKeyboardInputMock: vi.fn(),
   createFixedTickLoopMock: vi.fn(),
   renderGameToCanvasMock: vi.fn(),
 }));
 
 vi.mock('./render/sizing', () => ({
   attachResponsiveCanvas: moduleMocks.attachResponsiveCanvasMock,
+}));
+
+vi.mock('./input/keyboard', () => ({
+  attachKeyboardInput: moduleMocks.attachKeyboardInputMock,
 }));
 
 vi.mock('./game/loop', () => ({
@@ -26,6 +32,9 @@ import type { GameState } from './game/types';
 
 moduleMocks.attachResponsiveCanvasMock.mockImplementation(
   () => moduleMocks.resizeCleanupMock,
+);
+moduleMocks.attachKeyboardInputMock.mockImplementation(
+  () => moduleMocks.keyboardCleanupMock,
 );
 
 class MockElement {
@@ -160,6 +169,13 @@ describe('renderApp', () => {
     const loopStart = vi.fn();
     const loopStop = vi.fn();
     const loopSetState = vi.fn();
+    let keyboardBindings:
+      | {
+          getCurrentDirection: () => string;
+          onDirectionChange: (direction: string) => void;
+          onControl: (control: string) => void;
+        }
+      | undefined;
     let loopOptions:
       | {
           update: (state: GameState) => GameState;
@@ -168,7 +184,12 @@ describe('renderApp', () => {
       | undefined;
 
     moduleMocks.resizeCleanupMock.mockClear();
+    moduleMocks.keyboardCleanupMock.mockClear();
     moduleMocks.renderGameToCanvasMock.mockClear();
+    moduleMocks.attachKeyboardInputMock.mockImplementation((_, bindings) => {
+      keyboardBindings = bindings;
+      return moduleMocks.keyboardCleanupMock;
+    });
     moduleMocks.createFixedTickLoopMock.mockImplementation((options) => {
       loopOptions = options;
 
@@ -188,12 +209,22 @@ describe('renderApp', () => {
     );
 
     expect(moduleMocks.attachResponsiveCanvasMock).toHaveBeenCalledOnce();
+    expect(moduleMocks.attachKeyboardInputMock).toHaveBeenCalledOnce();
     expect(moduleMocks.createFixedTickLoopMock).toHaveBeenCalledOnce();
-    expect(loopSetState).toHaveBeenCalledWith({
+    expect(loopStart).toHaveBeenCalledOnce();
+
+    keyboardBindings?.onControl('toggle-pause');
+    expect(loopSetState).toHaveBeenLastCalledWith({
       ...initialState,
       status: 'running',
     });
-    expect(loopStart).toHaveBeenCalledOnce();
+
+    keyboardBindings?.onDirectionChange('up');
+    const movedState = loopOptions?.update({
+      ...initialState,
+      status: 'running',
+    });
+    expect(movedState?.direction).toBe('up');
 
     loopOptions?.render({
       ...initialState,
@@ -214,6 +245,7 @@ describe('renderApp', () => {
 
     cleanup();
 
+    expect(moduleMocks.keyboardCleanupMock).toHaveBeenCalledOnce();
     expect(loopStop).toHaveBeenCalledOnce();
     expect(moduleMocks.resizeCleanupMock).toHaveBeenCalledOnce();
   });
@@ -222,6 +254,14 @@ describe('renderApp', () => {
     const config = readGameplayConfig({});
     const initialState = createState();
     const { container } = createRenderContainer();
+    let keyboardBindings:
+      | {
+          getCurrentDirection: () => string;
+          onDirectionChange: (direction: string) => void;
+          onControl: (control: string) => void;
+        }
+      | undefined;
+    const loopSetState = vi.fn();
     let loopOptions:
       | {
           update: (state: GameState) => GameState;
@@ -229,6 +269,10 @@ describe('renderApp', () => {
         }
       | undefined;
 
+    moduleMocks.attachKeyboardInputMock.mockImplementation((_, bindings) => {
+      keyboardBindings = bindings;
+      return moduleMocks.keyboardCleanupMock;
+    });
     moduleMocks.createFixedTickLoopMock.mockImplementation((options) => {
       loopOptions = options;
 
@@ -236,7 +280,7 @@ describe('renderApp', () => {
         start: vi.fn(),
         stop: vi.fn(),
         getState: () => initialState,
-        setState: vi.fn(),
+        setState: loopSetState,
         isRunning: () => false,
       };
     });
@@ -287,6 +331,35 @@ describe('renderApp', () => {
       food: { x: 0, y: 0 },
       direction: 'right',
       status: 'game-over',
+      score: 0,
+      speedMs: 120,
+    });
+
+    keyboardBindings?.onControl('toggle-pause');
+    expect(loopSetState).toHaveBeenLastCalledWith({
+      ...initialState,
+      status: 'running',
+    });
+
+    loopSetState.mockClear();
+    keyboardBindings?.onControl('toggle-pause');
+    expect(loopSetState).toHaveBeenLastCalledWith({
+      ...initialState,
+      status: 'paused',
+    });
+
+    loopSetState.mockClear();
+    keyboardBindings?.onControl('restart');
+    expect(loopSetState).toHaveBeenLastCalledWith({
+      gridSize: 7,
+      snake: [
+        { x: 4, y: 3 },
+        { x: 3, y: 3 },
+        { x: 2, y: 3 },
+      ],
+      food: { x: 0, y: 0 },
+      direction: 'right',
+      status: 'idle',
       score: 0,
       speedMs: 120,
     });
