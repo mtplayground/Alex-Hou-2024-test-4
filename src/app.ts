@@ -1,6 +1,6 @@
 import type { GameplayConfig } from './config/env';
 import type { GameState } from './game/types';
-import { configureCanvas, renderGameToCanvas } from './render/canvas';
+import { attachResponsiveCanvas } from './render/sizing';
 import { getHighScore } from './storage/high-score';
 import { getGameOverOverlayMarkup, updateGameOverOverlay } from './ui/game-over';
 import { getHudMarkup, updateHud } from './ui/hud';
@@ -38,7 +38,7 @@ export function renderApp(
   container: Element,
   config: GameplayConfig,
   initialState: GameState,
-): void {
+): () => void {
   container.innerHTML = getAppMarkup(config, initialState);
 
   const canvas = container.querySelector<HTMLCanvasElement>('#game-board');
@@ -57,6 +57,15 @@ export function renderApp(
 
   updateHud(container, initialState, highScore);
   updateGameOverOverlay(container, initialState, highScore);
-  configureCanvas(canvas, initialState.gridSize);
-  renderGameToCanvas(context, initialState);
+
+  return attachResponsiveCanvas(
+    window,
+    canvas,
+    context,
+    () => initialState,
+    () => ({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    }),
+  );
 }
