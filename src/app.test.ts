@@ -16,5 +16,6 @@ describe('getAppMarkup', () => {
     expect(markup).toContain('TypeScript + Vite bootstrap is ready.');
     expect(markup).toContain('Grid size: 20');
     expect(markup).toContain('Starting snake length: 3');
+    expect(markup).toContain('id="game-board"');
   });
 });
