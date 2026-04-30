@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { getAppMarkup } from './app';
 import { readGameplayConfig } from './config/env';
 import { createInitialGameState } from './game/initial-state';
+
+const resizeCleanupMock = vi.fn();
+
+vi.mock('./render/sizing', () => ({
+  attachResponsiveCanvas: vi.fn(() => resizeCleanupMock),
+}));
 
 describe('getAppMarkup', () => {
   it('returns the starter snake game markup', () => {
