@@ -1,0 +1,11 @@
+app = "Alex-Hou-2024-test-4-b1e031"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 80
+  force_https = true
+  auto_start = true
+  auto_stop = "stop"
