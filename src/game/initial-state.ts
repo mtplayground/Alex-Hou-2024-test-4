@@ -1,6 +1,7 @@
 import { gameplayConfig } from '../config/env';
 
 import { spawnFood } from './food';
+import { getTickIntervalForScore } from './speed';
 
 import type { GameState, Snake } from './types';
 
@@ -40,6 +41,11 @@ export function createInitialGameState(
     direction: 'right',
     status: 'idle',
     score: 0,
-    speedMs: initialSpeedMs,
+    speedMs: getTickIntervalForScore(
+      0,
+      initialSpeedMs,
+      gameplayConfig.speedStepMs,
+      gameplayConfig.speedStepInterval,
+    ),
   };
 }
