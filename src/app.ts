@@ -8,8 +8,9 @@ import { getTickIntervalForScore } from './game/speed';
 import type { Direction, GameState } from './game/types';
 import { renderGameToCanvas } from './render/canvas';
 import { attachResponsiveCanvas } from './render/sizing';
-import { getHighScore } from './storage/high-score';
+import { getHighScore, setHighScore } from './storage/high-score';
 import {
+  attachRestartButtonHandler,
   createRestartedGameState,
   getGameOverOverlayMarkup,
   updateGameOverOverlay,
@@ -66,7 +67,8 @@ export function renderApp(
 
   let currentState = initialState;
   let pendingDirection: Direction = initialState.direction;
-  const highScore = getHighScore();
+  let highScore = getHighScore();
+  let previousStatus = initialState.status;
 
   const resizeCleanup = attachResponsiveCanvas(
     window,
@@ -127,6 +129,10 @@ export function renderApp(
     render: (state) => {
       currentState = state;
 
+      if (state.status === 'game-over' && previousStatus !== 'game-over') {
+        highScore = setHighScore(state.score);
+      }
+
       const boardSizePx = Number.parseFloat(canvas.style.width);
 
       renderGameToCanvas(
@@ -138,8 +144,17 @@ export function renderApp(
       );
       updateHud(container, state, highScore);
       updateGameOverOverlay(container, state, highScore);
+      previousStatus = state.status;
     },
   });
+
+  const restartGame = (): void => {
+    const restartedState = createRestartedGameState(currentState);
+    pendingDirection = restartedState.direction;
+    currentState = restartedState;
+    previousStatus = restartedState.status;
+    loop.setState(restartedState);
+  };
 
   const keyboardCleanup = attachKeyboardInput(window, {
     getCurrentDirection: () => pendingDirection,
@@ -163,16 +178,15 @@ export function renderApp(
         return;
       }
 
-      const restartedState = createRestartedGameState(currentState);
-      pendingDirection = restartedState.direction;
-      currentState = restartedState;
-      loop.setState(restartedState);
+      restartGame();
     },
   });
+  const restartButtonCleanup = attachRestartButtonHandler(container, restartGame);
 
   loop.start();
 
   return () => {
+    restartButtonCleanup();
     keyboardCleanup();
     loop.stop();
     resizeCleanup();

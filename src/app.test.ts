@@ -7,6 +7,8 @@ const moduleMocks = vi.hoisted(() => ({
   attachKeyboardInputMock: vi.fn(),
   createFixedTickLoopMock: vi.fn(),
   renderGameToCanvasMock: vi.fn(),
+  getHighScoreMock: vi.fn(),
+  setHighScoreMock: vi.fn(),
 }));
 
 vi.mock('./render/sizing', () => ({
@@ -25,6 +27,11 @@ vi.mock('./render/canvas', () => ({
   renderGameToCanvas: moduleMocks.renderGameToCanvasMock,
 }));
 
+vi.mock('./storage/high-score', () => ({
+  getHighScore: moduleMocks.getHighScoreMock,
+  setHighScore: moduleMocks.setHighScoreMock,
+}));
+
 import { getAppMarkup, renderApp } from './app';
 import { readGameplayConfig } from './config/env';
 import { createInitialGameState } from './game/initial-state';
@@ -40,6 +47,23 @@ moduleMocks.attachKeyboardInputMock.mockImplementation(
 class MockElement {
   textContent = '';
   hidden = false;
+  private readonly listeners = new Map<string, Set<() => void>>();
+
+  addEventListener(eventName: string, listener: () => void): void {
+    const listeners = this.listeners.get(eventName) ?? new Set<() => void>();
+    listeners.add(listener);
+    this.listeners.set(eventName, listeners);
+  }
+
+  removeEventListener(eventName: string, listener: () => void): void {
+    this.listeners.get(eventName)?.delete(listener);
+  }
+
+  click(): void {
+    for (const listener of this.listeners.get('click') ?? []) {
+      listener();
+    }
+  }
 }
 
 class MockCanvasContext {
@@ -115,6 +139,7 @@ function createRenderContainer() {
   container.add('#game-over-overlay', new MockElement());
   container.add('#final-score-value', new MockElement());
   container.add('#new-high-score-badge', new MockElement());
+  container.add('#restart-button', new MockElement());
 
   return {
     container,
@@ -155,6 +180,16 @@ describe('renderApp', () => {
       removeEventListener: vi.fn(),
     });
     vi.spyOn(Math, 'random').mockReturnValue(0);
+    moduleMocks.resizeCleanupMock.mockClear();
+    moduleMocks.keyboardCleanupMock.mockClear();
+    moduleMocks.attachResponsiveCanvasMock.mockImplementation(
+      () => moduleMocks.resizeCleanupMock,
+    );
+    moduleMocks.attachKeyboardInputMock.mockImplementation(
+      () => moduleMocks.keyboardCleanupMock,
+    );
+    moduleMocks.getHighScoreMock.mockReturnValue(0);
+    moduleMocks.setHighScoreMock.mockImplementation((score) => score);
   });
 
   afterEach(() => {
@@ -363,5 +398,84 @@ describe('renderApp', () => {
       score: 0,
       speedMs: 120,
     });
+  });
+
+  it('persists a new high score on game over and restarts from the overlay button', () => {
+    const config = readGameplayConfig({});
+    const initialState = createState();
+    const { container } = createRenderContainer();
+    const loopSetState = vi.fn();
+    let loopOptions:
+      | {
+          update: (state: GameState) => GameState;
+          render: (state: GameState) => void;
+        }
+      | undefined;
+
+    moduleMocks.getHighScoreMock.mockReturnValue(4);
+    moduleMocks.setHighScoreMock.mockReturnValue(9);
+    moduleMocks.createFixedTickLoopMock.mockImplementation((options) => {
+      loopOptions = options;
+
+      return {
+        start: vi.fn(),
+        stop: vi.fn(),
+        getState: () => initialState,
+        setState: loopSetState,
+        isRunning: () => false,
+      };
+    });
+
+    const cleanup = renderApp(
+      container as unknown as Element,
+      config,
+      initialState,
+    );
+
+    loopOptions?.render(
+      createState({
+        status: 'game-over',
+        score: 9,
+      }),
+    );
+    loopOptions?.render(
+      createState({
+        status: 'game-over',
+        score: 9,
+      }),
+    );
+
+    expect(moduleMocks.setHighScoreMock).toHaveBeenCalledTimes(1);
+    expect(moduleMocks.setHighScoreMock).toHaveBeenCalledWith(9);
+
+    const highScoreElement =
+      container.querySelector<MockElement>('#high-score-value');
+    const badgeElement =
+      container.querySelector<MockElement>('#new-high-score-badge');
+    expect(highScoreElement?.textContent).toBe('9');
+    expect(badgeElement?.hidden).toBe(false);
+
+    const restartButton =
+      container.querySelector<MockElement>('#restart-button');
+    restartButton?.click();
+
+    expect(loopSetState).toHaveBeenLastCalledWith({
+      gridSize: 7,
+      snake: [
+        { x: 4, y: 3 },
+        { x: 3, y: 3 },
+        { x: 2, y: 3 },
+      ],
+      food: { x: 0, y: 0 },
+      direction: 'right',
+      status: 'idle',
+      score: 0,
+      speedMs: 120,
+    });
+
+    cleanup();
+    loopSetState.mockClear();
+    restartButton?.click();
+    expect(loopSetState).not.toHaveBeenCalled();
   });
 });
