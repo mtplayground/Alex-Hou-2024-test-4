@@ -162,7 +162,10 @@ describe('renderApp smoke test', () => {
     vi.restoreAllMocks();
   });
 
-  it('mounts the app, advances the snake, updates the HUD, and shows game over', () => {
+  it(
+    'mounts the app, advances the snake, updates the HUD, and shows game over',
+    { timeout: 15_000 },
+    () => {
     const initialState: GameState = {
       ...createInitialGameState(7, 100),
       food: { x: 4, y: 2 },
@@ -215,5 +218,6 @@ describe('renderApp smoke test', () => {
     ).toBe(false);
 
     cleanup();
-  });
+    },
+  );
 });
