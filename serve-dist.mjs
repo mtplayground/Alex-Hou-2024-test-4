@@ -32,6 +32,10 @@ function getSafeAssetPath(pathname) {
   return join(distDir, relativePath);
 }
 
+function logRequest(method, pathname, statusCode) {
+  console.log(`${method} ${pathname} ${statusCode}`);
+}
+
 async function sendFile(response, filePath, contentType, statusCode = 200) {
   const fileStats = await stat(filePath);
 
@@ -53,6 +57,7 @@ const server = createServer(async (request, response) => {
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       response.writeHead(405, { 'Content-Type': 'text/plain; charset=utf-8' });
       response.end('Method Not Allowed');
+      logRequest(request.method, pathname, 405);
       return;
     }
 
@@ -69,6 +74,7 @@ const server = createServer(async (request, response) => {
     if (!filePath || !existsSync(filePath)) {
       response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
       response.end('Not Found');
+      logRequest(request.method, pathname, 404);
       return;
     }
 
@@ -79,10 +85,12 @@ const server = createServer(async (request, response) => {
         'Content-Type': getContentType(filePath),
       });
       response.end();
+      logRequest(request.method, pathname, 200);
       return;
     }
 
     await sendFile(response, filePath, getContentType(filePath));
+    logRequest(request.method, pathname, 200);
   } catch (error) {
     response.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
     response.end('Internal Server Error');
